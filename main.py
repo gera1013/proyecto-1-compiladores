@@ -20,6 +20,7 @@ class YAPLVisitor(YAPLGrammerVisitor):
         self.arguments_list = StructureList(YAPLStructures.ARGUMENT)
 
         self.classes_list.init_object(self.methods_list)
+        self.classes_list.init_string(self.methods_list)
 
         self.symbol_table.enter_scope()
         self.symbol_table.add_symbol("abort", YAPLTypes.OBJECT)
@@ -79,7 +80,6 @@ class YAPLVisitor(YAPLGrammerVisitor):
             if result[0] == Status.OKAY:
                 methods.append(result[1])
             else:
-                print(result[1])
                 return Status.ERROR
 
         if ctx.fattribute != None:
@@ -88,7 +88,6 @@ class YAPLVisitor(YAPLGrammerVisitor):
             if result[0] == Status.OKAY:
                 attributes.append(result[1])
             else:
-                print(result[1])
                 return Status.ERROR
 
         return Status.OKAY, methods, attributes
@@ -98,7 +97,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
         type = ctx.returnType.text
 
         if type not in self.type_table.types.keys():
-            return Status.ERROR, "Tipo '{}' declarado para el metodo '{}' no existe".format(type, name)
+            self.error_list.append(str(ctx.getRuleIndex()) + "Error al declarar metodo '{}', tipo '{}' declarado no existe".format(name, type))
+            return Status.ERROR
 
         self.symbol_table.add_symbol(name, type)
 
@@ -106,7 +106,7 @@ class YAPLVisitor(YAPLGrammerVisitor):
 
         args = self.visit(ctx.argumentList)
 
-        self.methods_list.add_structure([name, type, args])
+        self.methods_list.add_structure([name, type, args[1]])
 
         expr = self.visit(ctx.mainExpr)
 
@@ -115,7 +115,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
         if expr == type or expr == None:
             return Status.OKAY, self.methods_list.table[name]
         else:
-            return Status.ERROR, "TYPE DON'T MATCH"
+            self.error_list.append(str(ctx.getRuleIndex()) + " El valor de retorno del metodo '{}' debe ser de tipo '{}'".format(name, type))
+            return Status.ERROR
 
 
     def visitAttribute(self, ctx):
@@ -123,39 +124,48 @@ class YAPLVisitor(YAPLGrammerVisitor):
         type = ctx.typeName.text
 
         if type not in self.type_table.types.keys():
-            return Status.ERROR, "Tipo '{}' declarado para la variable '{}' no existe".format(type, name)
+            self.error_list.append(str(ctx.getRuleIndex()) + " Error al declarar variable '{}', el tipo '{}' no es reconocido por el sistema".format(name, type), {})
+            return Status.ERROR
 
-        if ctx.getChildCount() == 3:
-            self.symbol_table.add_symbol(name, type)
-            self.attributes_list.add_structure([name, type])
-
-        else:
-            self.symbol_table.add_symbol(name, type)
+        if ctx.getChildCount() > 3:
             expression_type = self.visit(ctx.getChild(4))
 
             print("EXPRESSION TYPE", expression_type)
 
             if expression_type != type:
-                return Status.ERROR, "Error en la asignacion, tipo {} no concuerda con {}".format(expression_type, type), {}
+                self.error_list.append(str(ctx.getRuleIndex) + " Error al declarar variable '{}', tipo '{}' no concuerda con tipo '{}' establecido".format(name, expression_type, type))
+                return Status.ERROR
         
+        self.symbol_table.add_symbol(name, type)
+        self.attributes_list.add_structure([name, type])
+
         return Status.OKAY, {"name": name, "type": type}
 
 
     def visitArguments(self, ctx):
         args = []
+        error = False
         for f in ctx.formal():
-            args.append(self.visit(f))
+            payload = self.visit(f)
+            if payload[0] == Status.ERROR:
+                error = True
 
-        return args
+            args.append(payload[1])
+
+        return (Status.OKAY, args) if not error else Status.ERROR
 
     def visitFormal(self, ctx):
         name = ctx.name.text
         type = ctx.typeName.text
 
+        if type not in self.type_table.types.keys():
+            self.error_list.append(str(ctx.getRuleIndex()) + " Error al declarar variable '{}', el tipo '{}' no es reconocido por el sistema".format(name, type))
+            return Status.ERROR
+
         self.symbol_table.add_symbol(name, type)
         self.arguments_list.add_structure([name, type])
 
-        return {"name": name, "type": type}
+        return Status.OKAY, {"name": name, "type": type}
 
     def visitExpression(self, ctx):
         result = None
@@ -226,7 +236,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
         print(if_exp_result, then_exp_result, else_exp_result)
 
         if if_exp_result != YAPLTypes.BOOL:
-            return Status.ERROR, "Condicion no es de tipo BOOL"
+            self.error_list.append(str(ctx.getRuleIndex) + " Condicion de if no es de tipo 'Bool'")
+            return Status.ERROR
 
         return else_exp_result
 
@@ -235,7 +246,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
         action_result = self.visit(ctx.whileAction) 
         
         if sentence_result != YAPLTypes.BOOL:
-            return Status.ERROR, "Condicion de ciclo en while mal definida"
+            self.error_list.append(str(ctx.getRuleIndex) + " Condicion de while no es de tipo 'Bool'")
+            return Status.ERROR
 
         return action_result
 
@@ -271,7 +283,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
         type = ctx.getChild(1).getText()
 
         if type not in self.type_table.types.keys():
-            return Status.ERROR, "Error al crear instancia de tipo '{}', no reconocido por el sistema".format(type)
+            self.error_list.append(str(ctx.getRuleIndex()) + " Error al crear instancia de tipo '{}', no reconocido por el sistema".format(type))
+            return Status.ERROR
             
         return type
 
@@ -293,6 +306,9 @@ class YAPLVisitor(YAPLGrammerVisitor):
             if len(method.args) == len(args):
                 for i in range(len(method.args)):
                     print(method.args)
+                    if args[i][0] == Status.ERROR:
+                        return Status.ERROR
+
                     if method.args[i].get('type') != args[i] and method.args[i].get('type') != self.type_table.types.get(args[i]).get('inherits'):
                         self.error_list.append(str(ctx.getRuleIndex()) + " Los tipos de los argumentos para el metodo '{}' no concuerdan".format(name))
                         return Status.ERROR
@@ -300,11 +316,11 @@ class YAPLVisitor(YAPLGrammerVisitor):
                 return method.type
             else:
                 if len(method.args) > len(args):
-                    self.error_list.append((ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}").format(name, len(method.args), len(args))
+                    self.error_list.append(str(ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}".format(name, len(method.args), len(args)))
                     return Status.ERROR
                 
                 if len(method.args) < len(args):
-                    self.error_list.append((ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}").format(name, len(method.args), len(args))
+                    self.error_list.append(str(ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}".format(name, len(method.args), len(args)))
                     return Status.ERROR
             
 
@@ -365,7 +381,9 @@ class YAPLVisitor(YAPLGrammerVisitor):
 
             if len(method.args) == len(args_list):
                 for i in range(len(method.args)):
-                    if args_list[i][0] == Status.ERROR:
+                    print(args_list)
+                    print(method.args)
+                    if args_list[i] == Status.ERROR:
                         return Status.ERROR
 
                     if method.args[i].get('type') != args_list[i] and method.args[i].get('type') != self.type_table.types.get(args_list[i]).get('inherits'):
@@ -375,11 +393,11 @@ class YAPLVisitor(YAPLGrammerVisitor):
                 return method.type
             else:
                 if len(method.args) > len(args_list):
-                    self.error_list.append((ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}").format(fun_name, len(method.args), len(args_list))
+                    self.error_list.append(str(ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}".format(fun_name, len(method.args), len(args_list)))
                     return Status.ERROR
                 
                 if len(method.args) < len(args_list):
-                    self.error_list.append((ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}").format(fun_name, len(method.args), len(args_list))
+                    self.error_list.append(str(ctx.getRuleIndex()) + " El metodo {} recibe {} parametros, se recibieron {}".format(fun_name, len(method.args), len(args_list)))
                     return Status.ERROR
         else:
             payload = self.symbol_table.lookup(ctx.name.text)

@@ -253,3 +253,15 @@ class StructureList():
         methods_table.table["abort"] = abort
         methods_table.table["type_name"] = type_name
         methods_table.table["copy"] = copy
+    
+    
+    def init_string(self, methods_table):
+        length = Method("length", YAPLTypes.OBJECT, [])
+        concat = Method("concat", YAPLTypes.STRING, [{"name": "s", "type": YAPLTypes.STRING}])
+        sub_str = Method("sub_str", YAPLTypes.SELF_TYPE, [{"name": "i", "type": YAPLTypes.INT}, {"l": "out", "type": YAPLTypes.INT}])
+
+        self.table["String"] = Class("String", None, [length, concat, sub_str])
+
+        methods_table.table["length"] = length
+        methods_table.table["concat"] = concat
+        methods_table.table["sub_str"] = sub_str
