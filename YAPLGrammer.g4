@@ -1,24 +1,25 @@
-grammar MyGrammer;
+grammar YAPLGrammer;
 
 /*PARSER RULES*/
 program  
-    :   meat=classP end=';';
+    :   (meat=classP end=';')+;
 
 classP
-    :   CLASSKEY TYPE (INHERITSKEY TYPE)? '{' (feature )* '}'
+    :   CLASSKEY className=TYPE (inherits=INHERITSKEY parentClass=TYPE)? '{' features=feature* '}'
 ;
 
-feature  
-    :   name=ID
+
+feature
+    :
     (
-        method
-    |   attribute
+        fmethod=method
+    |   fattribute=attribute
     )
     ';'
 ;
 
 method
-    :   '(' argumentList=arguments ')' ':' returnType=TYPE '{' mainExpr=expr '}'
+    :   name=ID '(' argumentList=arguments ')' ':' returnType=TYPE '{' mainExpr=expression '}'
 ;
 
 arguments
@@ -26,43 +27,76 @@ arguments
 ;
 
 attribute
-    :   ':' typeName=TYPE ('<-' expr)?
+    :   name=ID ':' typeName=TYPE ('<-' expression)?
 ;
 
 formal
     :   name=ID ':' typeName=TYPE
 ;
 
-expr
+expression
     : 
     (
             calls=overwrite
-        |   (IFKEY expr THENKEY expr ELSEKEY expr FIKEY)
-        |   (WHILEKEY expr LOOPKEY expr POOLKEY)
-        |   (LETKEY ID ':' TYPE ('<-' expr)? (',' ID ':' TYPE ('<-' expr)?)* INKEY expr)
+        |   stringexpression=STRING
+        |   ifexpression=ifx
+        |   whileexpression=whilex
+        |   letexpression=letx
         |   newDeclaration=declaration
-        |   (ISVOIDKEY expr)
-        |   NOTKEY expr
-        |   'true' 
-        |   'false' 
-        |   '(' expr ')'
-        |   INTEGERS 
-        |   STRING
-        |   innerExpr=multipleExpr
-        |   '~' expr
+        |   voidexpression=voidx
+        |   notexpression=notx
+        |   trueexpression='true'
+        |   falseexpression='false' 
+        |   parenthesisexpression=parenthesisx
+        |   innerexpression=multipleExpr
+        |   negationexpression=negationx
+        |   integerexpression=INTEGERS
+        |   selfexpression=selfx
     ) 
-    nextExpr=expr2
+    nextExpr=ops
+;
+
+ifx
+    : IFKEY ifexp=expression THENKEY thenexp=expression ELSEKEY elseexp=expression FIKEY
+;
+
+whilex
+    : WHILEKEY whileSentence=expression LOOPKEY whileAction=expression POOLKEY
+;
+
+letx
+    : LETKEY  letOne=attribute (',' letMore=attribute)* INKEY inexp=expression
+;
+
+voidx
+    : ISVOIDKEY expression
+;
+
+notx
+    : NOTKEY expression
+;
+
+parenthesisx
+    : '(' expression ')'
+;
+
+negationx
+    : '~' expression
 ;
 
 declaration
     : NEWKEY TYPE
 ;
 
-multipleExpr
-    : '{' (expr ';')+ '}'
+selfx
+    : SELFKEY
 ;
 
-expr2
+multipleExpr
+    : '{' (exp=expression ';')+ '}'
+;
+
+ops
     :   
     (
         (
@@ -74,14 +108,14 @@ expr2
             |   EQUALS
             |   LOWEREQUAL
         )
-        expr
+        secondexpression=expression
         | mCall = methodCall
-    ) expr2
-    |
+    ) ops #nextOps
+    | #escexpression
 ;
 
 methodCall
-    : ('@' TYPE)? '.' methodName=ID '(' (expr (',' expr)*)? ')'
+    : ('@' TYPE)? '.' methodName=ID '(' (expression (',' expression)*)? ')'
 ;
 
 overwrite
@@ -96,12 +130,17 @@ overwrite
 
 attrWrite
     :
-        ('<-' expr)
+        ('<-' exp=expression)
 ;
 
 funCall
     :
-        '(' (expr(',' expr)*)? ')'
+        '(' (argOne=expression argsMore=more*)? ')'
+;
+
+more
+    :
+    ',' exp=expression
 ;
 
 /*TOKENS & KEYWORDS*/
@@ -156,9 +195,11 @@ NEWKEY          : N E W;
 POOLKEY         : P O O L;
 ISVOIDKEY       : I S V O I D;
 NOTKEY          : N O T;
+SELFKEY         : S E L F;
 
 TYPE            : UPPER(LETTERS|DIGIT|'_')*;
 
+INTEGERS        : DIGIT+;
 ID              : (UPPER|LOWER|'_'|DIGIT)+;
 OBJECT          : LOWER(LETTERS|DIGIT)+;
 ALPHANUMERIC    : (DIGIT|LETTERS);
@@ -166,7 +207,6 @@ ALPHANUMERIC    : (DIGIT|LETTERS);
 DIGIT           : [0-9];
 LOWER           : [a-z];
 UPPER           : [A-Z];
-INTEGERS        : DIGIT+;
 
 LETTERS         : (LOWER|UPPER);
 STRING          : '"' ANYSET* '"';
