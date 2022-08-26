@@ -1,6 +1,3 @@
-from ast import arg
-import errno
-from types import MethodDescriptorType
 from structures import *
 from constants import *
 
