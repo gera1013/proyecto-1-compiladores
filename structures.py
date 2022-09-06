@@ -256,9 +256,9 @@ class StructureList():
     
     
     def init_string(self, methods_table):
-        length = Method("length", YAPLTypes.OBJECT, [])
+        length = Method("length", YAPLTypes.INT, [])
         concat = Method("concat", YAPLTypes.STRING, [{"name": "s", "type": YAPLTypes.STRING}])
-        sub_str = Method("sub_str", YAPLTypes.SELF_TYPE, [{"name": "i", "type": YAPLTypes.INT}, {"l": "out", "type": YAPLTypes.INT}])
+        sub_str = Method("sub_str", YAPLTypes.STRING, [{"name": "i", "type": YAPLTypes.INT}, {"l": "out", "type": YAPLTypes.INT}])
 
         self.table["String"] = Class("String", None, [length, concat, sub_str])
 

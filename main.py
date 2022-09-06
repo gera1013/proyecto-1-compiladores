@@ -26,21 +26,25 @@ class YAPLVisitor(YAPLGrammerVisitor):
         self.symbol_table.add_symbol("abort", YAPLTypes.OBJECT)
         self.symbol_table.add_symbol("type_name", YAPLTypes.STRING)
         self.symbol_table.add_symbol("copy", YAPLTypes.SELF_TYPE)
+        self.symbol_table.add_symbol("length", YAPLTypes.INT)
+        self.symbol_table.add_symbol("concat", YAPLTypes.STRING)
+        self.symbol_table.add_symbol("sub_str", YAPLTypes.STRING)
 
         for c in ctx.classP():
             status = self.visit(c)
-            print("END CLASS\n\n\n")
-            print(status)
+            print("END CLASS\nSTATUS: {}\n\n".format(status))
 
             if status == Status.ERROR:
+                print("FAILLLLLL")
                 return Status.ERROR
         
-        self.symbol_table.exit_scope()
+        scopes.append(self.symbol_table.exit_scope())
 
         return Status.OKAY
-        # return self.visitChildren(ctx)
+
 
     def visitClassP(self, ctx):
+        self.symbol_table.add_symbol(ctx.className.text, ctx.className.text)
         self.symbol_table.enter_scope()
 
         if ctx.inherits:
@@ -52,7 +56,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
                 self.symbol_table.add_symbol("in_int", YAPLTypes.INT)
 
             if ctx.parentClass.text not in self.type_table.types.keys():
-                return Status.ERROR, "Clase padre no definida en el lenguaje"
+                self.error_list.append(str(ctx.getRuleIndex()) + " Clase padre '{}' no definida en el lenguaje".format(ctx.parentClass.text))
+                return Status.ERROR
 
         for i in ctx.feature():
             result = self.visit(i)
@@ -75,12 +80,12 @@ class YAPLVisitor(YAPLGrammerVisitor):
         attributes = []
 
         if ctx.fmethod != None:
-            print("FMETH")
             result = self.visit(ctx.fmethod)
+            print("FMETH", result)
             if result[0] == Status.OKAY:
                 methods.append(result[1])
             else:
-                return Status.ERROR
+                return [Status.ERROR]
 
         if ctx.fattribute != None:
             print("FATTR")
@@ -88,7 +93,7 @@ class YAPLVisitor(YAPLGrammerVisitor):
             if result[0] == Status.OKAY:
                 attributes.append(result[1])
             else:
-                return Status.ERROR
+                return [Status.ERROR]
 
         return Status.OKAY, methods, attributes
 
@@ -109,6 +114,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
         self.methods_list.add_structure([name, type, args[1]])
 
         expr = self.visit(ctx.mainExpr)
+
+        print("MAIN EXPR TYPE", expr)
 
         scopes.append(self.symbol_table.exit_scope())
 
@@ -181,7 +188,7 @@ class YAPLVisitor(YAPLGrammerVisitor):
             self.visit(ctx.whileexpression)
         
         if ctx.letexpression != None:
-            self.visit(ctx.letexpression)
+            return self.visit(ctx.letexpression)
         
         if ctx.newDeclaration != None:
             return self.visit(ctx.newDeclaration)
@@ -193,7 +200,7 @@ class YAPLVisitor(YAPLGrammerVisitor):
             return self.visit(ctx.notexpression)
         
         if ctx.parenthesisexpression != None:
-            self.visit(ctx.parenthesisexpression)
+            return self.visit(ctx.parenthesisexpression)
         
         if ctx.innerexpression != None:
             return self.visit(ctx.innerexpression)
@@ -208,7 +215,6 @@ class YAPLVisitor(YAPLGrammerVisitor):
             return YAPLTypes.BOOL
         
         if ctx.stringexpression != None:
-            print(ctx.stringexpression.text)
             return YAPLTypes.STRING
         
         if ctx.integerexpression != None:
@@ -223,6 +229,9 @@ class YAPLVisitor(YAPLGrammerVisitor):
             if next_expr_res == None:
                 return result
 
+            if result == Status.ERROR:
+                return Status.ERROR
+
             return next_expr_res
 
         return Status.OKAY
@@ -236,7 +245,7 @@ class YAPLVisitor(YAPLGrammerVisitor):
         print(if_exp_result, then_exp_result, else_exp_result)
 
         if if_exp_result != YAPLTypes.BOOL:
-            self.error_list.append(str(ctx.getRuleIndex) + " Condicion de if no es de tipo 'Bool'")
+            self.error_list.append(str(ctx.getRuleIndex()) + " Condicion de if no es de tipo 'Bool'")
             return Status.ERROR
 
         return else_exp_result
@@ -258,7 +267,9 @@ class YAPLVisitor(YAPLGrammerVisitor):
 
         result = self.visit(ctx.inexp)
 
-        self.symbol_table.exit_scope()
+        print("LET RESULT", result)
+
+        scopes.append(self.symbol_table.exit_scope())
         return result
 
     def visitVoidx(self, ctx):
@@ -293,7 +304,7 @@ class YAPLVisitor(YAPLGrammerVisitor):
         for expression in ctx.expression():
             types.append(self.visit(expression))
 
-        print(types[-1])
+        print("MULTI TYPES", types)
 
         return types[-1]
 
@@ -305,7 +316,6 @@ class YAPLVisitor(YAPLGrammerVisitor):
 
             if len(method.args) == len(args):
                 for i in range(len(method.args)):
-                    print(method.args)
                     if args[i][0] == Status.ERROR:
                         return Status.ERROR
 
@@ -327,8 +337,6 @@ class YAPLVisitor(YAPLGrammerVisitor):
 
         operator = ctx.getChild(0).getText()
         print(operator, "WILL RETURN")
-
-        print(YAPLTypes.INT) if operator in ['*', '+', '-', '/'] else print(YAPLTypes.BOOL)
 
         if ctx.secondexpression != None:
             expression_type = self.visit(ctx.secondexpression)
@@ -381,8 +389,8 @@ class YAPLVisitor(YAPLGrammerVisitor):
 
             if len(method.args) == len(args_list):
                 for i in range(len(method.args)):
-                    print(args_list)
-                    print(method.args)
+                    print("ARGS", args_list)
+                    print("METHOD ARGS", method.args)
                     if args_list[i] == Status.ERROR:
                         return Status.ERROR
 
@@ -401,7 +409,12 @@ class YAPLVisitor(YAPLGrammerVisitor):
                     return Status.ERROR
         else:
             payload = self.symbol_table.lookup(ctx.name.text)
+            print("NAME", ctx.name.text)
             print("PAYLOAD", payload)
+            if payload[0] == Status.ERROR:
+                self.error_list.append(str(ctx.getRuleIndex()) + " La variable '{}' no ha sido declarada".format(ctx.name.text))
+                return Status.ERROR
+                
             return payload[1].get('type')
 
     def visitAttrWrite(self, ctx):
@@ -445,41 +458,3 @@ def do_visit(d):
     print(visitor.arguments_list.table)
 
     return output, visitor.error_list
-
-# if __name__ == "__main__":
-#     while 1:
-#         data =  InputStream("""
-# class Main {
-# 	a:Int;
-# 	b:Int;
-# 	c:Int;
-# 	d : Int <- a + b * c;
-
-#     print_hellobye(z:Int, y:String, x:Bool) : Object {
-#         if d < a then out_string("hello")
-#         else {
-# 		    out_string("bye", "one", "two");
-# 	    }
-#         fi
-#     };
-# };
-#         """)
-#         # lexer
-#         lexer = YAPLGrammerLexer(data)
-#         stream = CommonTokenStream(lexer)
-#         # parser
-#         parser = YAPLGrammerParser(stream)
-#         tree = parser.program()
-#         # evaluator
-#         visitor = YAPLVisitor()
-#         output = visitor.visit(tree)
-
-#         for scope in scopes:
-#             print(scope.table)
-
-#         print(visitor.classes_list.table)
-#         print(visitor.methods_list.table)
-#         print(visitor.attributes_list.table)
-#         print(visitor.arguments_list.table)
-
-#         break
